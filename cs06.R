@@ -1,14 +1,5 @@
-#' title: "cs06: Wind Farm Suitability Analysis with Raster and Vector Data"
+#cs06: Wind Farm Suitability Analysis with Raster and Vector Data
 #' subtitle: "Aggregating High Wind Speed Areas by County using `terra` and `tigris`"
-#' 
-#' Your goal for this assignment is to **identify the total area within each county of New York State that are suitable for wind turbines**. You will then visualize these results in a choropleth map.
-#' 
-#' For this case study, we will define suitable areas for wind farms based on the following simplified criteria:
-#' *   **Wind Speed**: Areas with average wind speeds greater than 8 m/s at 100m height.
-#' *   **Slope**: Areas with slope less than 10 degrees (steeper slopes are
-#'     generally unsuitable for construction).
-#' *   **Roughness**: Areas with surface roughness less than 100 (lower
-#'     roughness values indicate smoother terrain, which is preferable for wind farms).
 
 #install.packages("terra")
 #install.packages("elevatr")
@@ -20,18 +11,10 @@ library(elevatr)
 
 ny_counties_sf <- counties(state = "NY")
 
-#' ## Get elevation data
-#' 
-#' Download elevation data for New York using the `elevatr` package. We will use this to calculate slope and roughness, which are important factors for wind farm siting. 
-#' 
-#' Use the `get_elev_raster()` function to download elevation data for the extent of the wind raster. Set the zoom level (`z`) to 5 for a balance between resolution and download size. Clip the data to the location (`clip="location"`) of the wind raster.
 wind_raster <- rast("wind100.tif")
-elevation <- get_elev_raster(wind_raster, z = 5, clip = "location")
+elevation <- get_elev_raster(location = wind_raster, z = 5, clip = "location")
 
-#' 
 #' Then use `rast()` to convert the downloaded raster to a `terra` object and `resample()` to align it with the wind raster.  Resampling a raster is necessary when the two rasters have different resolutions or extents, ensuring that they can be accurately compared or combined in subsequent analyses.
-#' 
-#' 
 elevation_raster <- rast(elevation)
 resample(elevation_raster, wind_raster, method = "bilinear", filename = "re_elevation.tif", overwrite = TRUE)
 
@@ -40,32 +23,19 @@ resample(elevation_raster, wind_raster, method = "bilinear", filename = "re_elev
 st_crs(ny_counties_sf)
 st_crs(wind_raster)
 
-ny_counties_sf <- st_transform(ny_counties_sf, 9001)
+ny_counties_sf <- st_transform(ny_counties_sf, st_crs(wind_raster))
 st_crs(ny_counties_sf)
 
-#' ### Raster Processing: Identify High-Wind Areas
-#' 
-#' Our goal is to find areas with wind speeds over 10 m/s. We will create a new binary raster where cells meeting this criterion are given a value of 1, and all others are `NA`.
-#' 
-#' *   **Mask the raster** to the extent of the New York county polygons to make processing faster.
-#' *   **Reclassify the raster**: Create a new raster called `high_wind_raster`. Cells in the cropped raster with a value > 8 should become 1. All other cells should become 0. *Hint: a simple logical operator like `wind_raster_ny > 8` will work.*
-#' 
-mask(wind_raster, ny_counties_sf)
+wind_raster <- mask(wind_raster, ny_counties_sf)
 high_wind_raster <- wind_raster > 8
+terra::plot(high_wind_raster)
 
-#' 
-#' ### Resample and mask the elevation dataset
-#' 
-#' Resample (`resample()`) the DEM to match the wind raster resolution and extent, then mask it (`mask()`) to New York counties. Next, calculate slope and roughness from the DEM using `terrain()`. Slope should be in degrees, and roughness is a unitless index.
-#' 
-#' 
 re_elevation <- resample(elevation_raster, wind_raster)
-mask(re_elevation, ny_counties_sf)
+re_elevation <- mask(re_elevation, ny_counties_sf)
 
 slope <- terrain(re_elevation, "slope")
 roughness <- terrain(re_elevation, "roughness")
-
-#' 
+terra::plot(slope)
 #' ## Find suitable areas for Wind Farms
 #' 
 #' Locate pixels with high wind speed, low slope (<10), and low roughness (<100). Note that this is a very simplistic model and real-world suitability analysis would be more complex. 
@@ -101,9 +71,14 @@ suitable_area <- bind_cols(summary, ny_counties_sf)
 #' To get a table like this, you will likely need to use `select()`, `filter()`, `arrange()`, and `mutate()` from `dplyr`. Use `st_set_geometry()` to drop the geometry column for easier viewing.
 #' 
 suitable_area <- suitable_area %>%
-  select(area == 0) %>%
-  arrange(area) %>%
-  st_set_geometry(NULL)
+  mutate(area = as.numeric(area))
+
+area_suitable <- suitable_area %>%
+  filter(suitable_area$area > 0) %>%
+  arrange(desc(area))
+
+#area_suitable <- st_set_geometry(area_suitable)
+
 #' 
 #' ### Communicate Your Results: Create a Choropleth Map
 #' 
@@ -114,8 +89,10 @@ suitable_area <- suitable_area %>%
 #' *   Use an appropriate color scale, like `scale_fill_viridis_c()`.
 #' *   Add informative titles and labels.
 #' 
+chloropleth <- ggplot(data = area_suitable) + geom_sf(aes(fill = area, geometry = geometry))
 
-#' 
+chloropleth
+
 #' ## Deliverables
 #' 
 #' Submit your final, well-commented `.R` or `.qmd` script to your course repository.
