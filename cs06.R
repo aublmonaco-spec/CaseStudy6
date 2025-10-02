@@ -72,7 +72,8 @@ suitable_area <- suitable_area %>%
 area_suitable <- suitable_area %>%
   select(c("area", "NAME")) %>%
   filter(suitable_area$area > 0) %>%
-  arrange(desc(area))
+  arrange(desc(area)) %>%
+  rename(suitable_area_km2 = area)
 
 #Used ggplot with geom_sf and suitable_area to show suitable areas for wind farms; I filled the map by area so it would show the most suitable places that have area with high wind speeds, suitable slopes, and suitable roughness; I added labels and titles, and I removed the x- and y-axis labels
 chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry)) + labs(title = "Potential Wind Farm Area by NY County", subtitle = "Based on average wind speeds at 100m height", caption = "Data: NREL CONUS Wind Speed & US Census Bureau", fill = "Area with Wind Speed > 8 m/s (km^2)") + theme(panel.background = element_blank(), legend.position = "bottom", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
