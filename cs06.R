@@ -68,16 +68,22 @@ suitable_area <- bind_cols(summary, ny_counties_new)
 suitable_area <- suitable_area %>%
   mutate(area = as.numeric(area))
 
-#Made a new table (area_suitable) that includes only the area and name columns from suitable_area, and only includes areas greater than 0; I used arrange to arrange the table from greatest to least suitable area
+#Made a new table (area_suitable) that includes only the area, name, and geometry columns from suitable_area, and only includes counties with suitable areas greater than 0; I used arrange to arrange the table from greatest to least suitable area
 area_suitable <- suitable_area %>%
-  select(c("area", "NAME")) %>%
+  select(c("area", "NAME", "geometry")) %>%
   filter(suitable_area$area > 0) %>%
   arrange(desc(area)) %>%
   rename(suitable_area_km2 = area)
 
+#Used st_as_sf to convert area_suitable to an sf object and st_set_geometry to get rid of the geometry column in my new table
+st_as_sf(area_suitable)
+area_suitable <- area_suitable %>% 
+  st_set_geometry(NULL)
+
 #Used ggplot with geom_sf and suitable_area to show suitable areas for wind farms; I filled the map by area so it would show the most suitable places that have area with high wind speeds, suitable slopes, and suitable roughness; I added labels and titles, and I removed the x and y-axis labels
-chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry)) + labs(title = "Potential Wind Farm Area by NY County", subtitle = "Based on average wind speeds at 100m height", caption = "Data: NREL CONUS Wind Speed & US Census Bureau", fill = "Area with Wind Speed > 8 m/s (km2)") + theme(panel.background = element_blank(), legend.position = "bottom", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry)) + 
+  labs(title = "Potential Wind Farm Area by NY County", subtitle = "Based on average wind speeds at 100m height", caption = "Data: NREL CONUS Wind Speed & US Census Bureau", fill = expression(paste("Area with Wind Speed > 8 m/s ", ("km"^2)))) + 
+  theme(panel.background = element_blank(), legend.position = "bottom", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
 
 #Used scale_fill_viridis_c to fill the continuous data with a specified color palette
-
 chloropleth + scale_fill_viridis_c(option = "D")
