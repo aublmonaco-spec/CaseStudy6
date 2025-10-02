@@ -3,7 +3,7 @@
 
 #install.packages("terra")
 #install.packages("elevatr")
-install.packages("viridis")
+#install.packages("viridis")
 library(terra)
 library(tidyverse)
 library(sf)
@@ -11,52 +11,59 @@ library(tigris)
 library(elevatr)
 library(viridis)
 
+#Using the counties funciton gets data for the New York county polygons; I had to set cb to TRUE so that it would clip the boundaries around the shorelines and not include water
 ny_counties_sf <- counties(state = "NY", cb = TRUE)
 
+#I used the rast function here to put the wind tif file into raster format
 wind_raster <- rast("wind100.tif")
+
+#The get_elev_raster function here obtains elevation data within the boundaries of the wind_raster; the zoom argument determines the raster resolution; I clipped the data to the location so it would only show within the wind_raster boundaries
 elevation <- get_elev_raster(location = wind_raster, z = 5, clip = "location")
 
-#' Then use `rast()` to convert the downloaded raster to a `terra` object and `resample()` to align it with the wind raster.  Resampling a raster is necessary when the two rasters have different resolutions or extents, ensuring that they can be accurately compared or combined in subsequent analyses.
-
+#Using the rast function here converts the elevation data just obtained into raster format
 elevation_raster <- rast(elevation)
-elevation_raster <- resample(elevation_raster, wind_raster, method = "bilinear", filename = "re_elevation.tif", overwrite = TRUE)
 
-#' An equal-area projection is ideal for calculating area, so we will transform the county vector data to match the raster's CRS.
+#Resampling the elevation data with the wind_raster ensures that the resolutions are compatible; I used the bilinear method since it is the default for continuous data; I saved it as a file just to see what it looks like and added the overwrite argument in case I made future changes
+elevation_raster <- resample(elevation_raster, wind_raster, method = "bilinear", filename = "re_elevation.tif", overwrite = TRUE)
 
 st_crs(ny_counties_sf)
 st_crs(wind_raster)
 
+#I used st_transform to match the counties' crs to the wind_raster's crs; I used st_crs(wind_raster) as an easier way to convert the crs of the counties file
 ny_counties_new <- st_transform(ny_counties_sf, st_crs(wind_raster))
 st_crs(ny_counties_new)
 
+#Using the mask function here tells the wind-raster to only show values within the counties boundaries
 wind_raster <- mask(wind_raster, ny_counties_new)
-high_wind_raster <- wind_raster > 8
-terra::plot(high_wind_raster)
 
-re_elevation <- resample(elevation_raster, wind_raster)
+#The high_wind_raster now contains only values with wind speeds above 8 m/s from the wind_raster
+high_wind_raster <- wind_raster > 8
+
+#Resampled to ensure that the elevation_raster is now aligned with the high_wind_raster
+re_elevation <- resample(elevation_raster, high_wind_raster)
+
+#Ensured the elevation data only lies within the NY county boundaries
 re_elevation <- mask(re_elevation, ny_counties_new)
 
+#Used terrain to find the "slope" and "roughness" data of the re_elevation raster
 slope <- terrain(re_elevation, "slope")
 roughness <- terrain(re_elevation, "roughness")
 
+#Used logical expressions to specify that suitable areas are contained in the high_wind_raster, in areas with a slope less than 10 degrees, and a roughness less than 100; All other values are NA
 suitable_areas <- high_wind_raster & slope < 10 & roughness < 100
-terra::plot(suitable_areas)
 
+#Pixel_area contains the size of the suitable_area pixels in "km"
 pixel_area <- cellSize(suitable_areas, unit = "km")
 
+#multiplied the pixel_area by the original suitable_areas to get area in km^2
 multiplied_raster <- pixel_area * suitable_areas
 
-#' *   Use `terra::extract()` with the `suitable_area` and `ny_counties_proj`.
-#'     *   Set `fun='sum'` to total the suitable area in each county.
-#'     *   Set `na.rm = TRUE`.
-#' *   Join this summary back to the `ny_counties_proj` object using `bind_cols()`.  This only works because the order of the rows in the extracted data matches the order of the counties. 
-#' 
+#Extract takes the area values from the raster data and applies it to the counties data; Summarize totals the amount of suitable area in each county
 summary <- terra::extract(multiplied_raster, ny_counties_new, fun = sum, na.rm = TRUE)
 
+#Can use bind_cols to join the area data from the summary to the county data because the extracted data aligns with the county order
 suitable_area <- bind_cols(summary, ny_counties_new)
 
-#' To get a table like this, you will likely need to use `select()`, `filter()`, `arrange()`, and `mutate()` from `dplyr`. Use `st_set_geometry()` to drop the geometry column for easier viewing.
-#' 
 suitable_area <- suitable_area %>%
   mutate(area = as.numeric(area))
 
@@ -64,24 +71,10 @@ area_suitable <- suitable_area %>%
   filter(suitable_area$area > 0) %>%
   arrange(desc(area))
 
-#area_suitable <- st_set_geometry(area_suitable)
+#area_suitable <- st_set_geometry(area_suitable, NULL)
 
-#' 
-#' ### Communicate Your Results: Create a Choropleth Map
-#' 
-#' Visualizing the results is a key part of communicating your findings.
-#' 
-#' *   Use `ggplot()` and `geom_sf()` to create a choropleth map of the results.
-#' *   Fill each county based on the `high_wind_area_km2` column.
-#' *   Use an appropriate color scale, like `scale_fill_viridis_c()`.
 #' *   Add informative titles and labels.
 #' 
-chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry))
+chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry)) + labs(title = "Potential Wind Farm Area by NY County", subtitle = "Based on average wind speeds at 100m height", caption = "Data: NREL CONUS Wind Speed & US Census Bureau")
 
 chloropleth + scale_fill_viridis_c(option = "D")
-
-#' ## Deliverables
-#' 
-#' Submit your final, well-commented `.R` or `.qmd` script to your course repository.
-#' 
-#' 
