@@ -64,17 +64,18 @@ summary <- terra::extract(multiplied_raster, ny_counties_new, fun = sum, na.rm =
 #Can use bind_cols to join the area data from the summary to the county data because the extracted data aligns with the county order
 suitable_area <- bind_cols(summary, ny_counties_new)
 
+#Made area into a numeric column in suitable_area so that it would be possible to use a logical expression in the next step
 suitable_area <- suitable_area %>%
   mutate(area = as.numeric(area))
 
+#Made a new table (area_suitable) that includes only the area and name columns from suitable_area, and only includes areas greater than 0; I used arrange to arrange the table from greatest to least suitable area
 area_suitable <- suitable_area %>%
+  select(c("area", "NAME")) %>%
   filter(suitable_area$area > 0) %>%
   arrange(desc(area))
 
-#area_suitable <- st_set_geometry(area_suitable, NULL)
+#Used ggplot with geom_sf and suitable_area to show suitable areas for wind farms; I filled the map by area so it would show the most suitable places that have area with high wind speeds, suitable slopes, and suitable roughness; I added labels and titles, and I removed the x- and y-axis labels
+chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry)) + labs(title = "Potential Wind Farm Area by NY County", subtitle = "Based on average wind speeds at 100m height", caption = "Data: NREL CONUS Wind Speed & US Census Bureau", fill = "Area with Wind Speed > 8 m/s (km^2)") + theme(panel.background = element_blank(), legend.position = "bottom", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
 
-#' *   Add informative titles and labels.
-#' 
-chloropleth <- ggplot() + geom_sf(data = suitable_area, aes(fill = area, geometry = geometry)) + labs(title = "Potential Wind Farm Area by NY County", subtitle = "Based on average wind speeds at 100m height", caption = "Data: NREL CONUS Wind Speed & US Census Bureau")
-
+#USed scale_fill_viridis_c to fill the continuous data with a specified color palette
 chloropleth + scale_fill_viridis_c(option = "D")
